@@ -3,3 +3,5 @@ fastapi-jwt[authlib]==0.3.0
 uvicorn==0.31.0
 gunicorn==21.0.0
 python-multipart==0.0.11
+requests==2.32.3
+dotenv==0.9.9

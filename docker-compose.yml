@@ -3,9 +3,8 @@ version: '3.8'
 services:
   gsk_poc_api:
     build:
-      context: .
+      context: ./app
       dockerfile: Dockerfile
-    image: asd_alley/gsk_poc_api:v1
     hostname: gsk_poc_api
     container_name: gsk_poc_api
     env_file:
@@ -15,4 +14,22 @@ services:
     volumes:
       - ./app:/app/app  # 将主机的 app 目录挂载到容器中
     command: ["uvicorn", "app_main:app", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+
+  nginx_certbot:
+    build: 
+      context: ./nginx_certbot
+      dockerfile: Dockerfile
+    hostname: nginx_certbot
+    environment:
+      - CERTBOT_EMAIL=fredyhku@gmail.com
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    container_name: nginx_certbot
+    volumes:
+      - ${FRONTEND_PAGE}/dist:/dist
+      - ${NGINX_DATA_PATH}/nginx_secrets:/etc/letsencrypt
+    ports:
+      - 80:80
+      - 443:443
     restart: unless-stopped
