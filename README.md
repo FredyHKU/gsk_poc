@@ -8,7 +8,7 @@ POST /create_session
 curl -X POST http://127.0.0.1:8000/create_session
 
 # 返回值
-{"session_id":"030634f319304906","status":"success","message":"Session created successfully"}
+{"session_id":"eef227733e5a4d40","status":"success","message":"Session created successfully"}
 
 ```
 
@@ -16,13 +16,13 @@ curl -X POST http://127.0.0.1:8000/create_session
 POST /explore_docs/{session_id}
 ```sh
 
-curl -X POST http://127.0.0.1:8000/explore_docs/030634f319304906 \
+curl -X POST http://127.0.0.1:8000/explore_docs/eef227733e5a4d40 \
 -H "Content-Type: application/json" \
 -d '{"user_message": "国药集团物流服务中押车服务的收费准则是什么"}'
 
 # 返回值
 
-{"documents":[{"document_id":"doc123","document_name":"国药集团物流合同.pdf","preview":"xxxxxxxxxxxxxx"}],"message":"Found 1 relevant document","status":"success"}
+{"documents":[{"document_id":"doc123","document_name":"国药集团物流合同.pdf","preview":"xxxxxxxxxxxxxx","create_time":1740319113725,"update_time":1740319113725}],"message":"Found 1 relevant document","status":"success"}
 
 ```
 
@@ -31,7 +31,7 @@ POST /add_docs/{session_id}
 
 
 ```sh
-curl -X POST http://127.0.0.1:8000/add_docs/030634f319304906 \
+curl -X POST http://127.0.0.1:8000/add_docs/eef227733e5a4d40 \
 -H "Content-Type: application/json" \
 -d '{"document_id": ["doc123", "doc456"]}'
 
@@ -44,7 +44,7 @@ curl -X POST http://127.0.0.1:8000/add_docs/030634f319304906 \
 POST /chat_on_docs/{session_id}
 ```sh
 #会话有文档
-curl -X POST http://127.0.0.1:8000/chat_on_docs/030634f319304906 \
+curl -X POST http://127.0.0.1:8000/chat_on_docs/eef227733e5a4d40 \
 -H "Content-Type: application/json" \
 -d '{"message": "国药集团物流服务中押车服务的收费准则是什么"}' \
 -N

@@ -44,7 +44,9 @@ documents_db = [
     {
         "document_id": "doc123",
         "document_name": "国药集团物流合同.pdf",
-        "preview": "xxxxxxxxxxxxxx"
+        "preview": "xxxxxxxxxxxxxx",
+        "create_time": 1740319113725,
+        "update_time": 1740319113725,
     }
 ]
 

@@ -25,6 +25,8 @@ class DocumentResponse(BaseModel):
     document_id: str
     document_name: str
     preview: str
+    create_time: int
+    update_time: int
 
 class ExploreResponse(BaseModel):
     documents: List[DocumentResponse]
