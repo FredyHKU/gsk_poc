@@ -4,6 +4,7 @@ import uuid
 from schemas.chat import SessionResponse, ExploreRequest, ExploreResponse, AddDocsResponse, AddDocsRequest, ChatRequest
 from service.chat_with_doc import chat_stream
 import os
+import json
 
 router = APIRouter()
 
@@ -38,18 +39,21 @@ async def create_session():
 # 基于用户发送的 message，后端检索并返回相关文档
 ##################################
 
+# 模拟的文档数据
+documents_db = [
+    {
+        "document_id": "doc123",
+        "document_name": "国药集团物流合同.pdf",
+        "preview": "xxxxxxxxxxxxxx"
+    }
+]
+
+
 @router.post("/explore_docs/{session_id}", response_model=ExploreResponse)
 async def explore_docs(session_id: str = Path(..., description="Session ID from the user"),
                        request: ExploreRequest = Body(..., description="User message")):
     # user_message = request.user_message
-    # 模拟的文档数据
-    documents_db = [
-        {
-            "document_id": "doc123",
-            "document_name": "国药集团物流合同.pdf",
-            "preview": "xxxxxxxxxxxxxx"
-        }
-    ]
+
     try:
         # POC 只返回一份文档
         document = documents_db[0]
@@ -68,11 +72,12 @@ async def explore_docs(session_id: str = Path(..., description="Session ID from 
 # 添加文档到会话上下文
 ##################################
 
-# 模拟的文档数据库
-documents_db = {
-    "doc123": {"document_name": "国药集团物流合同.pdf"},
-    "doc456": {"document_name": "物流服务协议.docx"}
-}
+session_document_map = {}
+SESSION_DOCUMENT_MAP_FILE = "session_document_map.json"
+def save_session_document_map():
+    with open(SESSION_DOCUMENT_MAP_FILE, "w") as f:
+        json.dump(session_document_map, f, indent=4)
+    print("Session-document map saved to file.")
 
 @router.post("/add_docs/{session_id}", response_model=AddDocsResponse)
 async def add_docs_to_session(session_id: str = Path(..., description="Session ID from the user"),
@@ -83,20 +88,24 @@ async def add_docs_to_session(session_id: str = Path(..., description="Session I
 
     # POC 简化限制：只处理一份文档
     document_id = document_ids[0]
-    if document_id not in documents_db:
+    if document_id not in [d["document_id"] for d in documents_db]:
         raise HTTPException(status_code=404, detail=f"Document ID {document_id} not found")
 
+    # 建立 session_id 和 document_id 的联系
+    document = documents_db[0]
+    global session_document_map
+    if session_id not in session_document_map:
+        session_document_map[session_id] = document["document_id"]
+        print(session_id)
+        print(session_document_map[session_id])
+        # 持久化到本地文件
+        save_session_document_map()
+    else:
+        print(f"Session {session_id} already linked to document {session_document_map[session_id]}")
+
+
     # 获取文档名称
-    document_name = documents_db[document_id]["document_name"]
-
-    # 模拟的会话上下文存储
-    session_context = {}
-
-    # 将文档 ID 添加到会话上下文
-    if session_id not in session_context:
-        session_context[session_id] = []
-    session_context[session_id].append(document_id)
-
+    document_name = document["document_name"]
     return {
         "status": "success",
         "message": f"Document {document_name} added to session"
@@ -107,19 +116,13 @@ async def add_docs_to_session(session_id: str = Path(..., description="Session I
 ##################################
 
 
-
-session_doc_data = [
-    {"session_01": [{"document_id": "doc123", "document_name": "国药集团物流合同.pdf", "preview": "xxxxxxxxxxxxxx"}]}, 
-    { "session_02": []}
-]
-
 @router.post("/chat_on_docs/{session_id}")
 async def chat_on_docs(
     session_id: str = Path(..., description="Session ID from the user"),
     request: ChatRequest = Body(..., description="User message")
 ):
     # 检查会话中是否有文档
-    if session_id not in ["session_01"]:
+    if session_id not in session_document_map:
         raise HTTPException(status_code=400, detail={
             "status": "error",
             "err_code": 1001,
@@ -141,3 +144,11 @@ async def chat_on_docs(
     # 调用流式聊天函数
     return StreamingResponse(chat_stream(prompt), media_type="text/event-stream")
 
+
+# 初始化时加载会话到文档的映射（如果有）
+try:
+    with open(SESSION_DOCUMENT_MAP_FILE, "r") as f:
+        session_document_map = json.load(f)
+    print("Loaded session-document map from file.")
+except FileNotFoundError:
+    print("No existing session-document map file found.")
