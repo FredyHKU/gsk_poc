@@ -7,13 +7,9 @@ import os
 load_dotenv()
 
 # 从.env文件中获取配置
-# API_URL = os.getenv["API_URL"]
-# API_MODEL = os.getenv["API_MODEL"]
-# API_TOKEN = os.getenv["API_TOKEN"]
-
-API_URL = "https://api.siliconflow.cn/v1/chat/completions"
-API_MODEL = "Qwen/Qwen2.5-7B-Instruct"
-API_TOKEN = "sk-plruydftotsgybivemitprxukdvulbygpscljcalwscdwxpp"
+API_URL = os.getenv("API_URL")
+API_MODEL = os.getenv("API_MODEL")
+API_TOKEN = os.getenv("API_TOKEN")
 
 def chat_stream(prompt: str):
     """

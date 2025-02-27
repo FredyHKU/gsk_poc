@@ -5,7 +5,7 @@ gsk_poc
 POST /create_session
 ```sh
 
-curl -X POST http://127.0.0.1:8000/create_session
+curl -X POST http://localhost:3080/create_session
 
 # 返回值
 {"session_id":"eef227733e5a4d40","status":"success","message":"Session created successfully"}
