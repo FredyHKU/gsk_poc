@@ -5,11 +5,10 @@ gsk_poc
 POST /create_session
 ```sh
 
-curl -X POST http://localhost:8000/create_session
+curl -X POST http://127.0.0.1:8000/create_session
 
 # 返回值
-{"session_id":"bb54c812f51f11ef9ee40242ac120006","status":"success","message":"Session created successfully"}
-
+{"session_id":"6febef12f52a11efbfed0242ac120006","status":"success","message":"Session created successfully"}
 ```
 
 
@@ -17,7 +16,7 @@ curl -X POST http://localhost:8000/create_session
 POST /chat_on_docs/{session_id}
 ```sh
 #会话有文档
-curl -X POST http://127.0.0.1:8000/chat_on_docs/bb54c812f51f11ef9ee40242ac120006 \
+curl -X POST http://127.0.0.1:8000/chat_on_docs/6febef12f52a11efbfed0242ac120006 \
      -H "Content-Type: application/json" \
      -d '{"message": "世运电路成长性怎么样"}' \
      -i
