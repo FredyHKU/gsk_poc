@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Path, Body, UploadFile, File, HTTPException
+from fastapi import APIRouter, Path, Body, UploadFile, File, HTTPException, Query
 import uuid
 from schemas.chat import SessionResponse, ChatRequest
 from fastapi.responses import StreamingResponse
@@ -8,9 +8,10 @@ from dotenv import load_dotenv
 from typing import List
 from service.ragflow.file_parse import execute_insert_process
 from service.ragflow.api.utils.file_utils import get_project_base_directory
-from service.ragflow.retrieval2 import retrieve_content
+# from service.ragflow.retrieval2 import retrieve_content
+from service.ragflow.retrieval import retrieve_content
 from service.ragflow.chat import get_chat_completion
-from service.ragflow.retrieval import search_documents
+from typing import List, Optional
 
 # 加载 .env 文件
 load_dotenv()
@@ -44,12 +45,13 @@ async def create_session():
     #     }
 
 
-@router.post("/upload_files/{session_id}")
+@router.post("/upload_files/")
 async def upload_files(
-    session_id: str,
+    session_id: Optional[str] = Query(None),
     files: List[UploadFile] = File(...)
 ):
-    
+    if session_id is None:
+        session_id = "default"  # 设置默认值
     # 确保 storage/file 文件夹存在
     storage_dir = os.path.join(get_project_base_directory(), "storage/file")
     if not os.path.exists(storage_dir):
@@ -93,12 +95,15 @@ async def upload_files(
 ##################################
 
 
-@router.post("/chat_on_docs/{session_id}")
+@router.post("/chat_on_docs/")
 async def chat_on_docs(
-    session_id: str = Path(..., description="Session ID from the user"),
+    session_id: Optional[str] = Query(None),
     request: ChatRequest = Body(..., description="User message")
 ):
     question = request.message
+    if session_id is None:
+        session_id = "default"  # 设置默认值
+
     contents = retrieve_content(session_id, question)
     # 判断 contents 是否为空
     if not contents:
@@ -120,45 +125,7 @@ async def chat_on_docs(
 
     # 返回流式响应
     return StreamingResponse(
-        get_chat_completion(session_id, prompt
+        get_chat_completion(session_id, prompt, contents
         ),
         media_type="text/event-stream"
     )
-
-from typing import List, Optional
-from pydantic import BaseModel
-
-# 定义请求体模型
-class SearchRequest(BaseModel):
-    question: str
-    indexNames: str
-    # knowledgebaseIds: Optional[List[str]] = None
-    selectFields: Optional[List[str]] = None
-    highlightFields: Optional[List[str]] = None
-    condition: Optional[dict] = None
-    offset: Optional[int] = 0
-    limit: Optional[int] = 10
-    aggFields: Optional[List[str]] = None
-    rank_feature: Optional[dict] = None
-    topn: Optional[int] = 10
-    text_match_weight: Optional[float] = 0.3
-    dense_match_weight: Optional[float] = 0.7
-    similarity_threshold: Optional[float] = 0.5
-    minimum_should_match: Optional[float] = 0.3
-
-# 定义搜索接口
-@router.post("/search")
-def search(request: SearchRequest):
-    """
-    搜索接口，接收用户问题和索引名称，返回搜索结果。
-    """
-    try:
-        # 调用 search_documents 函数
-        results = search_documents(
-            question=request.question,
-            indexNames=request.indexNames
-        )
-        return {"status": "success", "data": results}
-    except Exception as e:
-        # 捕获异常并返回错误信息
-        raise HTTPException(status_code=500, detail=str(e))

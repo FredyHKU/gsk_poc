@@ -39,7 +39,7 @@ def generate_embedding(text: str, api_key: str = None, base_url: str = None, mod
         print(f"OpenAI API 请求失败: {e}")
         return None
 
-def process_item(item, file_path, session_id):
+def process_item(item, file_name, session_id):
     """
     处理单条数据
     """
@@ -65,8 +65,9 @@ def process_item(item, file_path, session_id):
 
         d["kb_id"] = session_id
         d["docnm_kwd"] = item["docnm_kwd"]
-        d["title_tks"] = item["docnm_kwd"]
-        d["doc_id"] = file_path
+        d["title_tks"] = item["title_tks"]
+        d["doc_id"] = xxhash.xxh64(file_name.encode("utf-8")).hexdigest()
+        d["docnm"] = file_name
         
         v = generate_embedding(item["content_with_weight"])
         

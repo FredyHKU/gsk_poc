@@ -31,3 +31,10 @@ html-text
 markdown
 elasticsearch
 elasticsearch-dsl
+xxhash
+tika
+openai
+jieba
+llama-index-core
+llama-index-postprocessor-dashscope-rerank-custom
+dashscope

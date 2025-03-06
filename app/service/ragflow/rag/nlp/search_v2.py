@@ -17,14 +17,14 @@ import logging
 import re
 from dataclasses import dataclass
 
-from rag.settings import TAG_FLD, PAGERANK_FLD
-from rag.utils import rmSpace
-from rag.nlp import rag_tokenizer, query
+from service.ragflow.rag.settings import TAG_FLD, PAGERANK_FLD
+from service.ragflow.rag.utils import rmSpace
+from service.ragflow.rag.nlp import rag_tokenizer, query
 import numpy as np
-from rag.utils.doc_store_conn import DocStoreConnection, MatchDenseExpr, FusionExpr, OrderByExpr
+from service.ragflow.rag.utils.doc_store_conn import DocStoreConnection, MatchDenseExpr, FusionExpr, OrderByExpr
+from service.ragflow.rag.nlp.model import generate_embedding, rerank_similarity
 
-
-def index_name(uid): return f"ragflow_{uid}"
+def index_name(uid): return f"{uid}"
 
 
 class Dealer:
@@ -44,7 +44,7 @@ class Dealer:
         group_docs: list[list] | None = None
 
     def get_vector(self, txt, emb_mdl, topk=10, similarity=0.1):
-        qv, _ = emb_mdl.encode_queries(txt)
+        qv = generate_embedding(txt)
         shape = np.array(qv).shape
         if len(shape) > 1:
             raise Exception(
@@ -98,34 +98,31 @@ class Dealer:
         else:
             highlightFields = ["content_ltks", "title_tks"] if highlight else []
             matchText, keywords = self.qryr.question(qst, min_match=0.3)
-            if emb_mdl is None:
-                matchExprs = [matchText]
-                res = self.dataStore.search(src, highlightFields, filters, matchExprs, orderBy, offset, limit,
-                                            idx_names, kb_ids, rank_feature=rank_feature)
+            # if emb_mdl is None:
+            #     matchExprs = [matchText]
+            #     res = self.dataStore.search(src, highlightFields, filters, matchExprs, orderBy, offset, limit,
+            #                                 idx_names, kb_ids, rank_feature=rank_feature)
+            #     total = self.dataStore.getTotal(res)
+            #     logging.debug("Dealer.search TOTAL: {}".format(total))
+            # else:
+            matchDense = self.get_vector(qst, emb_mdl, topk, req.get("similarity", 0.1))
+            q_vec = matchDense.embedding_data
+            src.append(f"q_{len(q_vec)}_vec")
+            fusionExpr = FusionExpr("weighted_sum", topk, {"weights": "0.05, 0.95"})
+            matchExprs = [matchText, matchDense, fusionExpr]
+            res = self.dataStore.search(src, highlightFields, filters, matchExprs, orderBy, offset, limit,
+                                        idx_names, kb_ids, rank_feature=rank_feature)
+            total = self.dataStore.getTotal(res)
+            logging.debug("Dealer.search TOTAL: {}".format(total))
+            # If result is empty, try again with lower min_match
+            if total == 0:
+                matchText, _ = self.qryr.question(qst, min_match=0.1)
+                filters.pop("doc_ids", None)
+                matchDense.extra_options["similarity"] = 0.17
+                res = self.dataStore.search(src, highlightFields, filters, [matchText, matchDense, fusionExpr],
+                                            orderBy, offset, limit, idx_names, kb_ids, rank_feature=rank_feature)
                 total = self.dataStore.getTotal(res)
-                logging.debug("Dealer.search TOTAL: {}".format(total))
-            else:
-                matchDense = self.get_vector(qst, emb_mdl, topk, req.get("similarity", 0.1))
-                q_vec = matchDense.embedding_data
-                src.append(f"q_{len(q_vec)}_vec")
-
-                fusionExpr = FusionExpr("weighted_sum", topk, {"weights": "0.05, 0.95"})
-                matchExprs = [matchText, matchDense, fusionExpr]
-
-                res = self.dataStore.search(src, highlightFields, filters, matchExprs, orderBy, offset, limit,
-                                            idx_names, kb_ids, rank_feature=rank_feature)
-                total = self.dataStore.getTotal(res)
-                logging.debug("Dealer.search TOTAL: {}".format(total))
-
-                # If result is empty, try again with lower min_match
-                if total == 0:
-                    matchText, _ = self.qryr.question(qst, min_match=0.1)
-                    filters.pop("doc_ids", None)
-                    matchDense.extra_options["similarity"] = 0.17
-                    res = self.dataStore.search(src, highlightFields, filters, [matchText, matchDense, fusionExpr],
-                                                orderBy, offset, limit, idx_names, kb_ids, rank_feature=rank_feature)
-                    total = self.dataStore.getTotal(res)
-                    logging.debug("Dealer.search 2 TOTAL: {}".format(total))
+                logging.debug("Dealer.search 2 TOTAL: {}".format(total))
 
             for k in keywords:
                 kwds.add(k)
@@ -324,7 +321,7 @@ class Dealer:
             ins_tw.append(tks)
 
         tksim = self.qryr.token_similarity(keywords, ins_tw)
-        vtsim, _ = rerank_mdl.similarity(query, [rmSpace(" ".join(tks)) for tks in ins_tw])
+        vtsim, _ = rerank_similarity(query, [rmSpace(" ".join(tks)) for tks in ins_tw])
         ## For rank feature(tag_fea) scores.
         rank_fea = self._rank_feature_scores(rank_feature, sres)
 
@@ -341,8 +338,6 @@ class Dealer:
                   rerank_mdl=None, highlight=False,
                   rank_feature: dict | None = {PAGERANK_FLD: 10}):
         ranks = {"total": 0, "chunks": [], "doc_aggs": {}}
-        if not question:
-            return ranks
 
         RERANK_PAGE_LIMIT = 3
         req = {"kb_ids": kb_ids, "doc_ids": doc_ids, "size": max(page_size * RERANK_PAGE_LIMIT, 128),
@@ -361,8 +356,10 @@ class Dealer:
                            kb_ids, embd_mdl, highlight, rank_feature=rank_feature)
         ranks["total"] = sres.total
 
+
         if page <= RERANK_PAGE_LIMIT:
-            if rerank_mdl and sres.total > 0:
+            if sres.total > 0:
+                print("重排模型。。。。")
                 sim, tsim, vsim = self.rerank_by_model(rerank_mdl,
                                                        sres, question, 1 - vector_similarity_weight,
                                                        vector_similarity_weight,

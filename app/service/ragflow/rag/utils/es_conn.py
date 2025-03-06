@@ -26,6 +26,7 @@ from elasticsearch_dsl import UpdateByQuery, Q, Search, Index
 from service.ragflow.rag.utils import singleton
 from service.ragflow.api.utils.file_utils import get_project_base_directory
 from service.ragflow.rag.utils.doc_store_conn import MatchExpr, OrderByExpr, MatchTextExpr, MatchDenseExpr, FusionExpr
+from service.ragflow.rag.nlp import is_english, rag_tokenizer
 
 ATTEMPT_TIME = 2
 PAGERANK_FLD = "pagerank_fea"
@@ -40,13 +41,94 @@ class ESConnection():
         self.info = {}
         logger.info(f"Use Elasticsearch  localhost as the doc engine.")
         self.es = Elasticsearch(
-            ["http://localhost:1200"],  # Elasticsearch 主机地址
+            ["http://es01:9200"],  # Elasticsearch 主机地址
             basic_auth=("elastic", "infini_rag_flow"),  # 用户名和密码
             verify_certs=False,  # 禁用 SSL 证书验证
             timeout=600
         )
+        # self.es = Elasticsearch(
+        #     ["http://localhost:1200"],  # Elasticsearch 主机地址
+        #     basic_auth=("elastic", "infini_rag_flow"),  # 用户名和密码
+        #     verify_certs=False,  # 禁用 SSL 证书验证
+        #     timeout=600
+        # )
         fp_mapping = os.path.join(get_project_base_directory(), "conf", "mapping.json")
         self.mapping = json.load(open(fp_mapping, "r"))
+
+
+    """
+    Helper functions for search result
+    """
+
+    def getTotal(self, res):
+        if isinstance(res["hits"]["total"], type({})):
+            return res["hits"]["total"]["value"]
+        return res["hits"]["total"]
+
+    def getChunkIds(self, res):
+        return [d["_id"] for d in res["hits"]["hits"]]
+    
+
+    def getHighlight(self, res, keywords: list[str], fieldnm: str):
+        ans = {}
+        for d in res["hits"]["hits"]:
+            hlts = d.get("highlight")
+            if not hlts:
+                continue
+            txt = "...".join([a for a in list(hlts.items())[0][1]])
+            if not is_english(txt.split()):
+                ans[d["_id"]] = txt
+                continue
+
+            txt = d["_source"][fieldnm]
+            txt = re.sub(r"[\r\n]", " ", txt, flags=re.IGNORECASE | re.MULTILINE)
+            txts = []
+            for t in re.split(r"[.?!;\n]", txt):
+                for w in keywords:
+                    t = re.sub(r"(^|[ .?/'\"\(\)!,:;-])(%s)([ .?/'\"\(\)!,:;-])" % re.escape(w), r"\1<em>\2</em>\3", t,
+                               flags=re.IGNORECASE | re.MULTILINE)
+                if not re.search(r"<em>[^<>]+</em>", t, flags=re.IGNORECASE | re.MULTILINE):
+                    continue
+                txts.append(t)
+            ans[d["_id"]] = "...".join(txts) if txts else "...".join([a for a in list(hlts.items())[0][1]])
+
+        return ans
+    
+
+    def getAggregation(self, res, fieldnm: str):
+        agg_field = "aggs_" + fieldnm
+        if "aggregations" not in res or agg_field not in res["aggregations"]:
+            return list()
+        bkts = res["aggregations"][agg_field]["buckets"]
+        return [(b["key"], b["doc_count"]) for b in bkts]
+
+    def getFields(self, res, fields: list[str]) -> dict[str, dict]:
+        res_fields = {}
+        if not fields:
+            return {}
+        for d in self.__getSource(res):
+            m = {n: d.get(n) for n in fields if d.get(n) is not None}
+            for n, v in m.items():
+                if isinstance(v, list):
+                    m[n] = v
+                    continue
+                if not isinstance(v, str):
+                    m[n] = str(m[n])
+                # if n.find("tks") > 0:
+                #     m[n] = rmSpace(m[n])
+
+            if m:
+                res_fields[d["id"]] = m
+        return res_fields
+
+
+    def __getSource(self, res):
+        rr = []
+        for d in res["hits"]["hits"]:
+            d["_source"]["id"] = d["_id"]
+            d["_source"]["_score"] = d["_score"]
+            rr.append(d["_source"])
+        return rr
 
     """
     Database operations

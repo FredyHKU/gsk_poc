@@ -15,22 +15,13 @@
 #
 import os
 import logging
-from api.utils import get_base_config, decrypt_database_config
-from api.utils.file_utils import get_project_base_directory
+from service.ragflow.api.utils.file_utils import get_project_base_directory
 
 # Server
 RAG_CONF_PATH = os.path.join(get_project_base_directory(), "conf")
 
-ES = get_base_config("es", {})
-INFINITY = get_base_config("infinity", {"uri": "infinity:23817"})
-AZURE = get_base_config("azure", {})
-S3 = get_base_config("s3", {})
-MINIO = decrypt_database_config(name="minio")
-try:
-    REDIS = decrypt_database_config(name="redis")
-except Exception:
-    REDIS = {}
-    pass
+ES = None
+
 DOC_MAXIMUM_SIZE = int(os.environ.get("MAX_CONTENT_LENGTH", 128 * 1024 * 1024))
 
 SVR_QUEUE_NAME = "rag_flow_svr_queue"

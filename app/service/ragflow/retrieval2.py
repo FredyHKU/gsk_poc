@@ -1,7 +1,7 @@
 from elasticsearch import Elasticsearch
 from openai import OpenAI
 import jieba
-
+import json
 
 
 
@@ -32,7 +32,7 @@ def generate_embedding(text: str, api_key: str = None, base_url: str = None, mod
 def retrieve_content(session_id: str, question: str):
     print("连接数据库")
     es = Elasticsearch(
-            ["http://localhost:1200"],  # Elasticsearch 主机地址
+            ["http://es01:9200"],  # Elasticsearch 主机地址
             basic_auth=("elastic", "infini_rag_flow"),  # 用户名和密码
             verify_certs=False,  # 禁用 SSL 证书验证
             timeout=600
@@ -99,8 +99,11 @@ def retrieve_content(session_id: str, question: str):
     results = []
     for hit in filtered_results:
         result = {
-            "score": hit['_score'],
-            "content_with_weight": hit['_source'].get('content_with_weight', 'N/A')
+            # "score": hit['_score'],
+            "doc_id": hit['_source'].get('doc_id', 'N/A'),
+            "docnm": hit['_source'].get('docnm', 'N/A'),
+            "content_with_weight": hit['_source'].get('content_with_weight', 'N/A'),
+
         }
         results.append(result)
 

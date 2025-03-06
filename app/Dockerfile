@@ -1,23 +1,22 @@
-# Dockerfile
-FROM python:3.11.7-slim AS python3_11_base
+FROM gsk_poc_base:0.0.1
 
-# Update pip
-RUN pip config set global.extra-index-url "https://mirrors.cernet.edu.cn/pypi/web/simple" \
-    && pip install --upgrade pip
-    
-# Set work directory
+
+# 更新 pip 并配置镜像源
+RUN pip config set global.extra-index-url "https://mirrors.cernet.edu.cn/pypi/web/simple"
+RUN pip install --upgrade pip setuptools wheel
+
+# 设置工作目录
 WORKDIR /app
 
-FROM python3_11_base
+# 拷贝依赖文件并安装
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy requirements files and install packages
-COPY requirements.txt /app/	
-
-RUN chmod -R 755 /app \
-    && pip install --no-cache-dir -r requirements.txt \
-    && rm -rf /var/lib/apt/lists/*
-	
-# Copy all files from the current directory to the workdir in the container
+# 拷贝代码
 COPY . /app
 
+# 修改文件权限
 RUN chmod -R 755 /app
+
+# RUN mkdir -p /usr/local/nltk_data
+# COPY /home/zzhan1/nltk_data /usr/local/nltk_data

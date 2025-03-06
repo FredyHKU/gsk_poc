@@ -7,7 +7,16 @@ import chardet
 from service.ragflow.rag.utils import num_tokens_from_string
 from PIL import Image
 
-
+def is_english(texts):
+    eng = 0
+    if not texts:
+        return False
+    for t in texts:
+        if re.match(r"[ `a-zA-Z.,':;/\"?<>!\(\)-]", t.strip()):
+            eng += 1
+    if eng / len(texts) > 0.8:
+        return True
+    return False
 
 def tokenize_chunks_docx(chunks, doc, eng, images):
     res = []

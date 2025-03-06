@@ -1,7 +1,8 @@
 from openai import OpenAI
 import os
+import json
 
-def get_chat_completion(session_id, question):
+def get_chat_completion(session_id, question, retrieved_content):
     """
     获取流式聊天完成结果，并按照指定格式输出。
 
@@ -29,6 +30,18 @@ def get_chat_completion(session_id, question):
         for chunk in completion:
             # print("原始 chunk 数据:", chunk)
             if chunk.choices[0].finish_reason == "stop":
+                if not retrieved_content:
+                    message = {
+                        "documents": ["没有找到相关内容"],
+                    }
+                    json_message = json.dumps(message)
+                    yield f"event: retrieved_content\ndata: {json_message}\n\n"
+
+                message = {
+                    "documents": retrieved_content,
+                }
+                json_message = json.dumps(message)
+                yield f"event: retrieved_content\ndata: {json_message}\n\n"
                 # 结束时发送 [DONE] 事件
                 yield "event: end\ndata: [DONE]\n\n"
                 break
@@ -42,14 +55,16 @@ def get_chat_completion(session_id, question):
                         "content": delta.content,
                         "thinking": False,
                     }
-                    yield f"event: message\ndata: {message}\n\n"
+                    json_message = json.dumps(message)
+                    yield f"event: message\ndata: {json_message}\n\n"
                 else :
                     message = {
                         "role": "assistant",
                         "content": delta.reasoning_content,
                         "thinking": True,
                     }
-                    yield f"event: message\ndata: {message}\n\n"
+                    json_message = json.dumps(message)
+                    yield f"event: message\ndata: {json_message}\n\n"
 
     except Exception as e:
         # 发生错误时返回错误信息
@@ -57,7 +72,8 @@ def get_chat_completion(session_id, question):
             "role": "error",
             "content": str(e)
         }
-        yield f"event: error\ndata: {error_message}\n\n"
+        json_error_message = json.dumps(error_message)
+        yield f"event: error\ndata: {json_error_message}\n\n"
 
 
 # 调用函数并获取流式输出
