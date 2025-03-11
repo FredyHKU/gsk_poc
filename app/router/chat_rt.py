@@ -104,28 +104,35 @@ async def chat_on_docs(
     if session_id is None:
         session_id = "default"  # 设置默认值
 
-    contents = retrieve_content(session_id, question)
-    # 判断 contents 是否为空
-    if not contents:
-        combined_content = "知识库没有找到相关内容"
-    else:
-        # 提取 content_with_weight 并拼接
-        content_with_weight_list = [item['content_with_weight'] for item in contents]
-        combined_content = "\n\n ".join(content_with_weight_list)
+    references = retrieve_content(session_id, question)
     
-        # 拼接用户问题和提取的内容
-        prompt = f"""
-请根据相关背景信息回答用户的问题：
-用户问题: {question}
-相关背景信息: {combined_content}
-"""
 
-        print(prompt)
+    # 判断 contents 是否为空
+    if not references:
+        formatted_references = "知识库没有找到相关内容, 请结合你自己的知识回答"
+    else:
+        # 格式化参考内容
+        formatted_references = "\n".join([f"[{ref['id']}] {ref['content_with_weight']}" for ref in references])
+    
+        
+    prompt = f"""
+    你是一个智能助手，负责根据用户的问题和提供的参考内容生成回答。请严格按照以下要求生成回答：
+    1. 回答必须基于提供的参考内容。
+    2. 在回答中，每一块内容都必须标注引用的来源，格式为：##引用编号$$。例如：##1$$ 表示引用自第1条参考内容。
+    3. 如果没有参考内容，请明确说明。
+    
+    参考内容：
+    {formatted_references}
+    
+    用户问题：{question}
+    """
+
+    print(prompt)
 
 
     # 返回流式响应
     return StreamingResponse(
-        get_chat_completion(session_id, prompt, contents
+        get_chat_completion(session_id, prompt, references
         ),
         media_type="text/event-stream"
     )

@@ -5,14 +5,49 @@ from llama_index.postprocessor.dashscope_rerank import DashScopeRerank
 import numpy as np
 
 import os
-os.environ["DASHSCOPE_API_KEY"] = "sk-f25b431f918a4796b65b1ae4a2c3ce56"
+from dotenv import load_dotenv
+load_dotenv()
+
+def get_chat_completion_block(session_id, question, references):
+    """
+    结合知识库内容生成回答，并在回答中标注引用来源。
+
+    :param question: 用户问题
+    :param references: 知识库内容，格式为 [{"id": 1, "content": "..."}, ...]
+    :return: 模型的回答
+    """
+    try:
+        
+        # 初始化 OpenAI 客户端
+        client = OpenAI(
+            api_key=os.getenv("DASHSCOPE_API_KEY", "sk-f25b431f918a4796b65b1ae4a2c3ce56"),
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
+        )
+        # 格式化参考内容
+        formatted_references = "\n".join([f"[{ref['id']}] {ref['content']}" for ref in references])
+    
+        # 构造提示词
+        
+    
+        # 调用模型生成回答
+        completion = client.chat.completions.create(
+            model="deepseek-r1",
+            messages=[{"role": "user", "content": prompt}],
+            stream=False,
+        )
+    
+        return completion.choices[0].message.content
+
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 def rerank_similarity(query, texts):
+    api_key = os.getenv("DASHSCOPE_API_KEY")
     # 创建节点列表
     nodes = [NodeWithScore(node=Node(text=text), score=1.0) for text in texts]
 
     # 初始化 DashScopeRerank
-    dashscope_rerank = DashScopeRerank(top_n=len(texts))
+    dashscope_rerank = DashScopeRerank(top_n=len(texts), api_key=api_key)
 
     # 执行重排序
     results = dashscope_rerank.postprocess_nodes(nodes, query_str=query)
@@ -54,15 +89,13 @@ def generate_embedding(text: str, api_key: str = None, base_url: str = None, mod
 
 # 示例调用
 if __name__ == "__main__":
-    # 示例用法
-    query = "你好"
-    ins_tw = [["啦啦啦"], ["哈喽"], ["你好吗"]]  # 假设 ins_tw 是一个包含文本列表的列表
+    # 示例调用
+    question = "法国的首都是哪里？"
+    references = [
+        {"id": 1, "content": "法国的首都是巴黎。"},
+        {"id": 2, "content": "巴黎是欧洲的文化中心之一。"},
+    ]
+    session_id = "sd"
     
-    # 假设 rmSpace 是一个函数，用于处理文本
-    def rmSpace(text):
-        return text.strip()
-    
-    # 使用 similarity 函数
-    vtsim, _ = rerank_similarity(query, [rmSpace(" ".join(tks)) for tks in ins_tw])
-    
-    print("重排序后的分数:", vtsim)
+    response = get_chat_completion_block(session_id, question, references)
+    print(response)

@@ -2,6 +2,7 @@
 from service.ragflow.rag.nlp.search_v2 import Dealer
 from service.ragflow.rag.utils.es_conn import ESConnection
 
+import json
 # 创建 ElasticsearchConnection 实例
 es_connection = ESConnection()
 
@@ -25,22 +26,25 @@ def retrieve_content(indexNames: str, question: str):
     extracted_data = []
 
 
-    for chunk in results['chunks']:
+    for i, chunk in enumerate(results['chunks'], start=1):
         content_with_weight = chunk.get('content_with_weight', 'N/A')
         # similarity = chunk.get('similarity', 'N/A')
         # vector_similarity = chunk.get('vector_similarity', 'N/A')
         # term_similarity = chunk.get('term_similarity', 'N/A')
         doc_id = chunk.get('doc_id', 'N/A')
-        docnm = chunk.get('docnm', 'N/A')
-        
-        extracted_data.append({
+        docnm = chunk.get('docnm_kwd', 'N/A')
+        docnm = docnm.split("/")[-1]
+        print(f"docnm...............\n")
+        print(docnm)
+
+        message = {
+            "id": i,
             "document_id": doc_id,
             "document_name": docnm,
             'content_with_weight': content_with_weight,
-            # 'similarity': similarity,
-            # 'vector_similarity': vector_similarity,
-            # 'term_similarity': term_similarity
-        })
+        }
+        
+        extracted_data.append(message)
 
     return extracted_data
 

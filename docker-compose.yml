@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   gsk_poc_api:
     build:
@@ -7,31 +6,54 @@ services:
       dockerfile: Dockerfile
     hostname: gsk_poc_api
     container_name: gsk_poc_api
+    environment:
+      - HF_ENDPOINT=https://hf-mirror.com
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
       - .env
     ports:
-      - "8000:8000"  # 将主机的 8000 端口映射到容器的 8000 端口
+      - "8001:8000"  # 将主机的 8000 端口映射到容器的 8000 端口
     volumes:
       - ./app:/app/app  # 将主机的 app 目录挂载到容器中
+      - /home/ubuntu/nltk_data:/usr/local/nltk_data
     command: ["uvicorn", "app_main:app", "--host", "0.0.0.0", "--port", "8000"]
     restart: unless-stopped
 
-  nginx_certbot:
-    build: 
-      context: ./nginx_certbot
-      dockerfile: Dockerfile
-    hostname: nginx_certbot
-    environment:
-      - CERTBOT_EMAIL=fredyhku@gmail.com
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    container_name: nginx_certbot
+  es01:
+    container_name: gsk-es-01
+    # profiles:
+    #   - elasticsearch
+    image: elasticsearch:8.11.3
     volumes:
-      - ${FRONTEND_PAGE}/dist:/dist
-      - ${NGINX_DATA_PATH}/nginx_secrets:/etc/letsencrypt
+      - gsk_esdata01:/usr/share/elasticsearch/data
     ports:
-      - 80:80
-      - 443:443
-    restart: unless-stopped
+      - ${ES_PORT}:9200
+    env_file: .env
+    environment:
+      - node.name=es01
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - bootstrap.memory_lock=false
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - cluster.routing.allocation.disk.watermark.low=5gb
+      - cluster.routing.allocation.disk.watermark.high=3gb
+      - cluster.routing.allocation.disk.watermark.flood_stage=2gb
+      - TZ=${TIMEZONE}
+    mem_limit: ${MEM_LIMIT}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test: ["CMD-SHELL", "curl http://localhost:9200"]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+    restart: on-failure
+
+volumes:
+  gsk_esdata01:
+    driver: local

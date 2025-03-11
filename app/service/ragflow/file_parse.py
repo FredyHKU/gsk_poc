@@ -73,8 +73,6 @@ def process_item(item, file_name, session_id):
         
         # 将嵌入向量存储到字典中
         d["q_%d_vec" % len(v)] = v
-        print(type(d))
-        print(d)
 
         return d
 
