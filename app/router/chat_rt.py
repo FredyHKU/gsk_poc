@@ -1,17 +1,19 @@
-from fastapi import APIRouter, Path, Body, UploadFile, File, HTTPException, Query
+from fastapi import APIRouter, Body, UploadFile, File, HTTPException, Query, Security, status
 import uuid
 from schemas.chat import SessionResponse, ChatRequest
 from fastapi.responses import StreamingResponse
 import os
-import json
 from dotenv import load_dotenv
 from typing import List
-from service.ragflow.file_parse import execute_insert_process
-from service.ragflow.api.utils.file_utils import get_project_base_directory
-# from service.ragflow.retrieval2 import retrieve_content
-from service.ragflow.retrieval import retrieve_content
-from service.ragflow.chat import get_chat_completion
+from service.core.file_parse import execute_insert_process
+from service.core.api.utils.file_utils import get_project_base_directory
+from fastapi_jwt import JwtAuthorizationCredentials
+from service.core.retrieval import retrieve_content
+from service.core.chat import get_chat_completion
+from service.auth import access_security
+from utils import logger
 from typing import List, Optional
+from database.knowledgebase_operations import insert_knowledgebase, verify_user_knowledgebase
 
 # 加载 .env 文件
 load_dotenv()
@@ -26,30 +28,44 @@ router = APIRouter()
 ##################################
 
 @router.post("/create_session", response_model=SessionResponse)
-async def create_session():
-  
-    session_id = str(uuid.uuid4()).replace("-", "")[:16]
-    # response = create_chat_session(RAGFLOW_API_ADDRESS, RAGFLOW_API_KEY, RAGFLOW_CHAT_ID, session_name)
-    # if response.get("code") == 0:
-    #     session_id = str(response["data"]["id"])
-    return {
-        "session_id": session_id,
-        "status": "success",
-        "message": "Session created successfully"
-    }
-    # else:
-    #     return {
-    #         "session_id": "",
-    #         "status": "error",
-    #         "message": response.get("message", "")
-    #     }
+async def create_session(
+    credentials: JwtAuthorizationCredentials = Security(access_security),
+):
+    """
+    创建一个新的聊天会话，生成唯一的会话ID
+    验证用户身份并返回会话ID
+    """
+    try:
+        user_id = credentials.subject.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
+        # 生成16位会话ID
+        session_id = str(uuid.uuid4()).replace("-", "")[:16]
+
+        return {
+            "session_id": session_id,
+            "status": "success",
+            "message": "Session created successfully"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
 
 
 @router.post("/upload_files/")
 async def upload_files(
     session_id: Optional[str] = Query(None),
-    files: List[UploadFile] = File(...)
+    files: List[UploadFile] = File(...),
+    credentials: JwtAuthorizationCredentials = Security(access_security),
 ):
+    """
+    上传文件到指定会话
+    将文件保存到本地存储并插入到ElasticSearch和PostgreSQL数据库中
+    """
     if session_id is None:
         session_id = "default"  # 设置默认值
     # 确保 storage/file 文件夹存在
@@ -63,6 +79,9 @@ async def upload_files(
         os.makedirs(session_dir)
     
     try:
+        user_id = str(credentials.subject.get("user_id"))
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
         for file in files:
             file_name = file.filename
             file_path = os.path.join(session_dir, file_name)
@@ -76,9 +95,14 @@ async def upload_files(
             # file_streams.append(await file.read())  # 或根据需要处理文件流
             print(file_url)
             print(file_name)
-            print(session_id)
 
-            execute_insert_process(file_url, file_name, session_id)
+            # 将文件内容解析并存入ES
+            execute_insert_process(file_url, file_name, user_id)
+            logger.info("数据插入es")
+
+            # 将文件记录存入PostgreSQL
+            insert_knowledgebase(user_id, file_name)
+            logger.info("数据插入pg")
 
         return {
             "status": "success",
@@ -86,53 +110,52 @@ async def upload_files(
         }
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"文件解析失败: {str(e)}")
-
+        logger.exception(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
     
 
-##################################
-# 基于ragflow知识库对话
-##################################
 
 
 @router.post("/chat_on_docs/")
 async def chat_on_docs(
-    session_id: Optional[str] = Query(None),
-    request: ChatRequest = Body(..., description="User message")
+    session_id: str = Query(...),
+    request: ChatRequest = Body(..., description="User message"),
+    credentials: JwtAuthorizationCredentials = Security(access_security),
 ):
-    question = request.message
-    if session_id is None:
-        session_id = "default"  # 设置默认值
-
-    references = retrieve_content(session_id, question)
-    
-
-    # 判断 contents 是否为空
-    if not references:
-        formatted_references = "知识库没有找到相关内容, 请结合你自己的知识回答"
-    else:
-        # 格式化参考内容
-        formatted_references = "\n".join([f"[{ref['id']}] {ref['content_with_weight']}" for ref in references])
-    
-        
-    prompt = f"""
-    你是一个智能助手，负责根据用户的问题和提供的参考内容生成回答。请严格按照以下要求生成回答：
-    1. 回答必须基于提供的参考内容。
-    2. 在回答中，每一块内容都必须标注引用的来源，格式为：##引用编号$$。例如：##1$$ 表示引用自第1条参考内容。
-    3. 如果没有参考内容，请明确说明。
-    
-    参考内容：
-    {formatted_references}
-    
-    用户问题：{question}
     """
+    基于已上传文档进行聊天
+    从知识库中检索相关内容，并生成流式响应
+    """
+    try:
+        user_id = str(credentials.subject.get("user_id"))
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+        
+        # 验证用户是否有自己的知识库
+        verify_user_knowledgebase(user_id)
 
-    print(prompt)
+        question = request.message
+    
+        # 从知识库检索与问题相关的内容
+        references = retrieve_content(user_id, question)
 
 
-    # 返回流式响应
-    return StreamingResponse(
-        get_chat_completion(session_id, prompt, references
-        ),
-        media_type="text/event-stream"
-    )
+        # 返回流式响应
+        return StreamingResponse(
+            get_chat_completion(session_id, question, references, user_id
+            ),
+            media_type="text/event-stream"
+        )
+    
+    except HTTPException as e:
+        # 捕获 HTTPException 并重新抛出，保持状态码和详情
+        raise e
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )

@@ -38,3 +38,9 @@ jieba
 llama-index-core
 llama-index-postprocessor-dashscope-rerank-custom
 dashscope
+psycopg2-binary
+bcrypt
+fastapi-jwt
+python-jose
+authlib
+colorlog

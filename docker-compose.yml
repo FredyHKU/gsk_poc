@@ -54,6 +54,23 @@ services:
       retries: 120
     restart: on-failure
 
+  gsk_pg:
+    container_name: gsk_pg
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_PASSWORD=pg123456
+      - POSTGRES_USER=postgre
+      - POSTGRES_DB=gsk
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+
 volumes:
   gsk_esdata01:
+    driver: local
+  pg_data:
     driver: local
